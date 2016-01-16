@@ -65,7 +65,7 @@ def one_partition_NDCG(x ,labels ,model ,i ,factor):
     #truth = pd.Series(le.inverse_transform(test_y).tolist())
     return mean_NDCG(preds, truth)
 
-def corss_valation_score(x ,labels ,model ,partition):
+def cross_valation_score(x ,labels ,model ,partition):
     piv_train = x.shape[0]
     factor = piv_train / partition; 
     sum = Parallel(n_jobs=partition)(delayed(one_partition_NDCG)(x,labels,model,i,factor) for i in range(partition))
