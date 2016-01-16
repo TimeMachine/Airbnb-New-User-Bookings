@@ -50,8 +50,8 @@ def one_partition_NDCG(x ,labels ,model ,i ,factor):
         test_x = x[i*factor:]
         test_y = y[i*factor:]
     else:
-        trans_x = pd.concat((x[:i*factor],x[(i+1)*factor:]), axis=0 ,ignore_index=True)
-        trans_y = pd.concat((y[:i*factor],y[(i+1)*factor:]), axis=0 ,ignore_index=True)
+        trans_x = np.concatenate((x[:i*factor],x[(i+1)*factor:]))
+        trans_y = np.concatenate((y[:i*factor],y[(i+1)*factor:]))
         test_x = x[i*factor:(i+1)*factor]
         test_y = y[i*factor:(i+1)*factor]
     model.fit(trans_x,trans_y)
@@ -65,15 +65,15 @@ def one_partition_NDCG(x ,labels ,model ,i ,factor):
     #truth = pd.Series(le.inverse_transform(test_y).tolist())
     return mean_NDCG(preds, truth)
 
-def cross_valation_score(x ,labels ,model ,partition):
+def cross_validation_score(x ,labels ,model ,partition):
     piv_train = x.shape[0]
     factor = piv_train / partition; 
     sum = Parallel(n_jobs=partition)(delayed(one_partition_NDCG)(x,labels,model,i,factor) for i in range(partition))
+    print sum
     return np.mean(sum)
     
 # simple check because the excution time is too long.
 def score_predictions(x ,labels ,model):
     piv_train = x.shape[0]
     factor = piv_train / 10; 
-    return one_partition_NDCG(x,labels,model,9,factor)
-    
+    return one_partition_NDCG(x,labels,model,5,factor)

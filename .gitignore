@@ -1,1 +1,4 @@
-input/
+input/sessions.csv
+*.pyc
+*.o
+*.csv

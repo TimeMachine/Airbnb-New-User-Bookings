@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import sys
+import datetime
 from sklearn.preprocessing import LabelEncoder
 from sklearn.cross_validation import cross_val_score
 from xgboost.sklearn import XGBClassifier
@@ -20,27 +21,42 @@ piv_train = df_train.shape[0]
 df_all = pd.concat((df_train, df_test), axis=0, ignore_index=True)
 #Removing id and date_first_booking
 df_all = df_all.drop(['id', 'date_first_booking'], axis=1)
-#Filling nan
-df_all = df_all.fillna(-1)
 
 #####Feature engineering#######
 #date_account_created
-dac = np.vstack(df_all.date_account_created.astype(str).apply(lambda x: list(map(int, x.split('-')))).values)
-df_all['dac_year'] = dac[:,0]
-df_all['dac_month'] = dac[:,1]
-df_all['dac_day'] = dac[:,2]
+df_all['date_account_created'] = df_all.date_account_created.apply(lambda x: datetime.datetime.strptime(x,'%Y-%m-%d'))
+df_all['dac_year'] = df_all.date_account_created.apply(lambda x: x.year)
+df_all['dac_month'] = df_all.date_account_created.apply(lambda x: x.month)
+df_all['dac_weekday'] = df_all.date_account_created.apply(lambda x: x.weekday())
 df_all = df_all.drop(['date_account_created'], axis=1)
-
+#add dfb feature that the score will be bad because of the lossing data is too many.
+'''
+def dfb_map(x):
+    if x!= '-1':
+        return list(map(int, x.split('-')))
+    else:
+        return [-1,-1,-1]
+#date_first_booking
+dfb = np.vstack(df_all.date_first_booking.astype(str).apply(dfb_map).values)
+df_all['dfb_year'] = dfb[:,0]
+df_all['dfb_month'] = dfb[:,1]
+'''
 #timestamp_first_active
-tfa = np.vstack(df_all.timestamp_first_active.astype(str).apply(lambda x: list(map(int, [x[:4],x[4:6],x[6:8],x[8:10],x[10:12],x[12:14]]))).values)
-df_all['tfa_year'] = tfa[:,0]
-df_all['tfa_month'] = tfa[:,1]
-df_all['tfa_day'] = tfa[:,2]
+df_all['timestamp_first_active'] = df_all.timestamp_first_active.astype(str).apply(lambda x: datetime.datetime.strptime(x[:8],'%Y%m%d'))
+#tfa = np.vstack(df_all.timestamp_first_active.astype(str).apply(lambda x: list(map(int, [x[:4],x[4:6],x[6:8],x[8:10],x[10:12],x[12:14]]))).values)
+df_all['tfa_year'] = df_all.timestamp_first_active.apply(lambda x: x.year)
+df_all['tfa_month'] = df_all.timestamp_first_active.apply(lambda x: x.month)
+df_all['tfa_weekday'] = df_all.timestamp_first_active.apply(lambda x: x.weekday())
 df_all = df_all.drop(['timestamp_first_active'], axis=1)
 
+#I tuned the age's parameter from 60 to 100  and then I found the upperbound of age about 85 is better.
 #Age
 av = df_all.age.values
-df_all['age'] = np.where(np.logical_or(av<14, av > 85), -1, av)
+df_all['age'] = np.where(np.logical_or(av<14, av>85), float('nan'), av)
+df_all.age = df_all.age.fillna(df_all.age.median())
+
+#Filling nan
+df_all = df_all.fillna(-1)
 
 #One-hot-encoding features
 ohe_feats = ['gender', 'signup_method', 'signup_flow', 'language', 'affiliate_channel', 'affiliate_provider', 'first_affiliate_tracked', 'signup_app', 'first_device_type', 'first_browser']
@@ -55,40 +71,24 @@ X = vals[:piv_train]
 le = LabelEncoder()
 y = le.fit_transform(labels)   
 X_test = vals[piv_train:]
+
 #Classifier
-xgb = XGBClassifier(max_depth=6, learning_rate=0.3, n_estimators=25,
-                    objective='multi:softprob', subsample=0.5, colsample_bytree=0.5, seed=0)                  
+xgb = XGBClassifier(max_depth=6, learning_rate=0.253, n_estimators=43,
+                    objective='multi:softprob', subsample=0.6, colsample_bytree=0.6, seed=0)                  
 
-print('scores:', NDCG.score_predictions(X, labels,xgb))
-#print('scores:', NDCG.score_predictions(X, labels,xgb))
-#score = cross_val_score(xgb,X,y,scoring='accuracy',cv=5,n_jobs=5)
-#print np.mean(score)
-
-#xgb.fit(X, y)
-#y_pred = xgb.predict_proba(X_test)  
+print('scores:', NDCG.cross_validation_score(X, labels,xgb,5))
 '''
-xgb.fit(X[:piv_train*9/10], y[:piv_train*9/10])
-y_pred = xgb.predict_proba(X[piv_train*9/10:])  
-print y_pred
+xgb.fit(X, y)
+y_pred = xgb.predict_proba(X_test)  
 
 #Taking the 5 classes with highest probabilities
 ids = []  #list of ids
 cts = []  #list of countries
-for i in range(piv_train - piv_train*9/10):
-    #idx = id_test[i]
-    #ids += [idx] * 5
-    #cts += le.inverse_transform(np.argsort(y_pred[i])[::-1])[:5].tolist()
-    #print i , len(y_pred)
-    cts += [le.inverse_transform(np.argsort(y_pred[i])[::-1])[:5].tolist()]
+for i in range(len(id_test)):
+    idx = id_test[i]
+    ids += [idx] * 5
+    cts += le.inverse_transform(np.argsort(y_pred[i])[::-1])[:5].tolist()
 
-preds = pd.DataFrame(cts)
-truth = pd.Series(labels[piv_train*9/10:])
-#print('predictions: \n', preds)
-#print('\n\n truth: \n', truth)
-print('scores:', NDCG.mean_NDCG(preds, truth))
-'''
-
-'''
 #Generate submission
 sub = pd.DataFrame(np.column_stack((ids, cts)), columns=['id', 'country'])
 sub.to_csv('sub.csv',index=False)
