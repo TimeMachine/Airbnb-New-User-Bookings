@@ -6,7 +6,7 @@
 User Data Exploration   by David Gasquez
 Airbnb Visualizations   by Terry J
 script_0.8655           by Sandro
-xgboost 01              by Leandro dos Santos Coelho
+script                  by FraPochetti
 Score predictions using NDCG  by  dietCoke
 ```
 根目錄存在的檔案介紹:
@@ -33,6 +33,8 @@ Score predictions using NDCG  by  dietCoke
 
 除此之外的欄位我並沒有去做調整，全部都放在預測的條件中。
 
+在session data中，我加入考慮`action`次數和各個`device_type`的次數,我認為這對於預測目的地有間接的相關。
+
 ### Pick Model ###
 我目前所了解的model只有3種:`Random Forest`、`Adaboost`、`Gradient boosting`。
 在一般的情況下，`Random Forest`效果會比`Adaboost`還要好，因為時間的關係，所以我不考慮使用`Adaboost`。
@@ -56,3 +58,10 @@ def cross_validation_score(x ,labels ,model ,partition):
 # partition 將資料切成幾等份來分別算分數
 ```
 詳細的範例放在`NDCG_example.py`中
+
+### Postscript ###
+關於`Radom Forest`的model，我還沒有時間去做測試。因為繳交期限和期末考重疊在一起，等我考完試就已經剩不到一個禮拜的時間了。
+
+總結來說，透過其他人的script，我學到了很多關於machine learning的知識，對python和相關的函式庫也變得較熟練。
+
+只考慮train_user的feature是不夠的，分數到0.866就很難再上去了，但是加上考慮session的feature就可以馬上升上0.878。

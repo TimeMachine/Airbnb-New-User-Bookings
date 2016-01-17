@@ -4,6 +4,8 @@ import sys
 import datetime
 from sklearn.preprocessing import LabelEncoder
 from sklearn.cross_validation import cross_val_score
+from sklearn.feature_extraction import DictVectorizer
+import scipy.sparse as sp
 from xgboost.sklearn import XGBClassifier
 import NDCG
 
@@ -20,7 +22,7 @@ piv_train = df_train.shape[0]
 #Creating a DataFrame with train+test data
 df_all = pd.concat((df_train, df_test), axis=0, ignore_index=True)
 #Removing id and date_first_booking
-df_all = df_all.drop(['id', 'date_first_booking'], axis=1)
+df_all = df_all.drop(['date_first_booking'], axis=1)
 
 #####Feature engineering#######
 #date_account_created
@@ -49,11 +51,11 @@ df_all['tfa_month'] = df_all.timestamp_first_active.apply(lambda x: x.month)
 df_all['tfa_weekday'] = df_all.timestamp_first_active.apply(lambda x: x.weekday())
 df_all = df_all.drop(['timestamp_first_active'], axis=1)
 
-#I tuned the age's parameter from 60 to 100  and then I found the upperbound of age about 85 is better.
+#tuned the age's parameter from 60 to 100  and then I found the upperbound of age about 85 is better.
 #Age
 av = df_all.age.values
 df_all['age'] = np.where(np.logical_or(av<14, av>85), float('nan'), av)
-df_all.age = df_all.age.fillna(df_all.age.median())
+#df_all.age = df_all.age.fillna(df_all.age.median())
 
 #Filling nan
 df_all = df_all.fillna(-1)
@@ -65,6 +67,47 @@ for f in ohe_feats:
     df_all = df_all.drop([f], axis=1)
     df_all = pd.concat((df_all, df_all_dummy), axis=1)
 
+#Session features
+df_sessions = pd.read_csv("./input/sessions.csv", encoding='utf8')
+users = df_all.id
+df_sessions = df_sessions.dropna(subset=["user_id"])
+device_freq = df_sessions.groupby('user_id').device_type.value_counts()
+action_freq = df_sessions.groupby('user_id').action.value_counts()
+
+def feature_dict(df):
+    f_dict = dict(list(df.groupby(level='user_id')))
+    res = {}
+    for k, v in f_dict.items():
+        v.index = v.index.droplevel('user_id')
+        res[k] = v.to_dict()
+    return res
+
+#make a dictionary with the frequencies { 'user_id' : {"IPhone": 2, "Windows": 1}}
+action_dict = feature_dict(action_freq)
+device_dict = feature_dict(device_freq)
+
+#transform to a list of dictionaries
+action_rows = [action_dict.get(k, {}) for k in users]
+device_rows = [device_dict.get(k, {}) for k in users]
+
+device_transf = DictVectorizer()
+tf = device_transf.fit_transform(device_rows)
+
+action_transf = DictVectorizer()
+tf2 = action_transf.fit_transform(action_rows)
+
+#concatenate the two datasets
+features = sp.hstack([tf, tf2])
+
+df_sess_features = pd.DataFrame(features.todense())
+df_sess_features['id'] = users
+df_all = pd.merge(df_all, df_sess_features, how='left', left_on='id', right_on='id')
+df_all = df_all.drop(['id'], axis=1)
+#release memory
+del df_sessions
+del device_freq
+del action_freq
+
 #Splitting train and test
 vals = df_all.values
 X = vals[:piv_train]
@@ -73,7 +116,7 @@ y = le.fit_transform(labels)
 X_test = vals[piv_train:]
 
 #Classifier
-xgb = XGBClassifier(max_depth=6, learning_rate=0.253, n_estimators=43,
+xgb = XGBClassifier(max_depth=6, learning_rate=0.25, n_estimators=43,
                     objective='multi:softprob', subsample=0.6, colsample_bytree=0.6, seed=0)                  
 
 print('scores:', NDCG.cross_validation_score(X, labels,xgb,5))
